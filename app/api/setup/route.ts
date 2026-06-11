@@ -38,6 +38,8 @@ export async function GET(request: Request) {
 			);
 		}
 
+		console.table(request.headers);
+
 		if (!macAddress) {
 			const error = new Error("Missing ID header");
 			logError(error, {
@@ -62,6 +64,7 @@ export async function GET(request: Request) {
 
 		// TRMNL API requires Model header
 		if (!model) {
+			console.log('no model in header');
 			return NextResponse.json(
 				{
 					status: 400,
@@ -76,6 +79,7 @@ export async function GET(request: Request) {
 
 		const currentUserId = await getCurrentUserId();
 
+		console.log('current user id: ', currentUserId);
 		// First check if the device exists by MAC address
 		const device = await db
 			.selectFrom("devices")
@@ -138,6 +142,7 @@ export async function GET(request: Request) {
 			}
 		}
 
+		console.log('device not found by MAC address or API key')
 		// If device not found by MAC address or API key, create a new one
 		if (!device) {
 			if (!currentUserId) {
@@ -173,6 +178,7 @@ export async function GET(request: Request) {
 					new Date().toISOString().replace(/[-:Z]/g, ""),
 				);
 
+			console.log('generated API key: ', apiKey);
 			try {
 				const newDevice = await db
 					.insertInto("devices")
@@ -246,6 +252,7 @@ export async function GET(request: Request) {
 			}
 		}
 
+		console.log('device exists by MAC')
 		// Device exists by MAC address - check if we need to update the API key
 		let currentApiKey = device.api_key;
 		const canManageExistingDevice =
@@ -277,6 +284,7 @@ export async function GET(request: Request) {
 			);
 		}
 
+		console.log('Api key mismatch')
 		if (apiKey && apiKey !== device.api_key) {
 			try {
 				await db
