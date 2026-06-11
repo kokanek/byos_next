@@ -63,19 +63,19 @@ export async function GET(request: Request) {
 		}
 
 		// TRMNL API requires Model header
-		if (!model) {
-			console.log('no model in header');
-			return NextResponse.json(
-				{
-					status: 400,
-					api_key: null,
-					friendly_id: null,
-					image_url: null,
-					message: "Model header is required",
-				},
-				{ status: 200 },
-			); // Status 200 for device compatibility
-		}
+		// if (!model) {
+		// 	console.log('no model in header');
+		// 	return NextResponse.json(
+		// 		{
+		// 			status: 400,
+		// 			api_key: null,
+		// 			friendly_id: null,
+		// 			image_url: null,
+		// 			message: "Model header is required",
+		// 		},
+		// 		{ status: 200 },
+		// 	); // Status 200 for device compatibility
+		// }
 
 		const currentUserId = await getCurrentUserId();
 
