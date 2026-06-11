@@ -11,11 +11,11 @@ export async function GET(request: Request) {
 		const macAddress = request.headers.get("ID")?.toUpperCase();
 		const apiKey = request.headers.get("Access-Token");
 		const model = request.headers.get("Model");
-		const { ready } = await checkDbConnection();
+		const { ready, PostgresUrl, error } = await checkDbConnection();
 
 		if (!ready) {
 			console.warn(
-				"Database client not initialized, using noDB mode, skipping device setup",
+				"new: Database client not initialized, using noDB mode, skipping device setup",
 			);
 			logInfo(
 				"Database client not initialized, using noDB mode, skipping device setup",
@@ -24,6 +24,8 @@ export async function GET(request: Request) {
 					metadata: {
 						macAddress: macAddress || null,
 						hasApiKey: Boolean(apiKey),
+						error: error,
+						PostgresUrl: PostgresUrl
 					},
 				},
 			);
