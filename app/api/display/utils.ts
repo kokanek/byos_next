@@ -292,6 +292,7 @@ export const findOrCreateDevice = async (
 
 	// 1. Try finding by API Key
 	if (apiKey) {
+		console.log('api key present: ', apiKey);
 		const deviceByApiKey = await db
 			.selectFrom("devices")
 			.selectAll()
@@ -299,6 +300,7 @@ export const findOrCreateDevice = async (
 			.executeTakeFirst();
 
 		if (deviceByApiKey) {
+			console.log('found device by apiKey ', deviceByApiKey);
 			const device = deviceByApiKey as unknown as Device;
 			const patch: Partial<Device> = {};
 			if (macAddress && macAddress !== device.mac_address) {
@@ -308,6 +310,7 @@ export const findOrCreateDevice = async (
 				patch.model = headers.model;
 			}
 			if (Object.keys(patch).length > 0) {
+				console.log('updating patch ', patch);
 				patch.updated_at = new Date().toISOString();
 				await db
 					.updateTable("devices")
@@ -329,6 +332,7 @@ export const findOrCreateDevice = async (
 
 	// 2. Try finding by MAC Address
 	if (macAddress) {
+		console.log('mac address supplied ', macAddress);
 		const deviceByMac = await db
 			.selectFrom("devices")
 			.selectAll()
@@ -336,6 +340,7 @@ export const findOrCreateDevice = async (
 			.executeTakeFirst();
 
 		if (deviceByMac) {
+			console.log('Device found by mac ', deviceByMac);
 			const device = deviceByMac as unknown as Device;
 			const patch: Partial<Device> = {};
 			if (apiKey && apiKey !== device.api_key) {
@@ -358,6 +363,7 @@ export const findOrCreateDevice = async (
 			}
 			if (Object.keys(patch).length > 0) {
 				patch.updated_at = new Date().toISOString();
+				console.log('Patching db macaddress ', patch);
 				await db
 					.updateTable("devices")
 					.set(patch)
@@ -378,6 +384,7 @@ export const findOrCreateDevice = async (
 
 	// 3. Create new device or use mock
 	if (apiKey) {
+		console.log('Creating new device ');
 		const currentUserId = await getCurrentUserId();
 		if (!currentUserId) {
 			logError("Refusing to auto-provision an unowned device", {
@@ -393,6 +400,7 @@ export const findOrCreateDevice = async (
 
 		// New device by explicit MAC
 		if (macAddress) {
+			console.log('New device by mac ');
 			const friendly_id = generateFriendlyId(
 				macAddress,
 				new Date().toISOString().replace(/[-:Z]/g, ""),
@@ -447,6 +455,7 @@ export const findOrCreateDevice = async (
 			.executeTakeFirst();
 
 		if (existingMock) {
+			console.log('existing mock ', existingMock);
 			const device = existingMock as unknown as Device;
 			if (macAddress) {
 				await db
@@ -473,7 +482,8 @@ export const findOrCreateDevice = async (
 					mockMacAddress,
 					new Date().toISOString().replace(/[-:Z]/g, ""),
 				);
-
+		
+		console.log('Creating mock with friendly id and new api key', friendly_id, new_api_key);
 		try {
 			const newDevice = await db
 				.insertInto("devices")
