@@ -1,7 +1,5 @@
-import { NextResponse } from "next/server";
 import { db } from "@/lib/database/db";
 import { checkDbConnection } from "@/lib/database/utils";
-import { getLatestFirmware, isUpdateAvailable } from "@/lib/firmware";
 import { logError, logInfo } from "@/lib/logger";
 import { DeviceDisplayMode } from "@/lib/mixup/constants";
 import {
@@ -35,18 +33,9 @@ function getGrayscaleLevels(grayscale: number | null | undefined): number {
 }
 
 export async function GET(request: Request) {
+	console.log('new display api');
+	
 	const headers = parseRequestHeaders(request);
-
-	// TRMNL API requires Access-Token header
-	if (!headers.apiKey) {
-		return NextResponse.json(
-			{
-				status: 401,
-				error: "Access-Token header is required",
-			},
-			{ status: 401 },
-		);
-	}
 
 	// log all headers in console for debugging
 	console.table(headers);
@@ -63,13 +52,8 @@ export async function GET(request: Request) {
 			source: "api/display",
 			metadata: { headers },
 		});
-		// Use header dimensions if provided
-		const width = headers.width || DEFAULT_IMAGE_WIDTH;
-		const height = headers.height || DEFAULT_IMAGE_HEIGHT;
-		const noDbQueryParams = `width=${width}&height=${height}&grayscale=2${headers.base64 ? "&base64=true" : ""}`;
-
 		return buildDisplayResponse(
-			`${baseUrl}/${DEFAULT_SCREEN}.bmp?${noDbQueryParams}`,
+			`${baseUrl}/${DEFAULT_SCREEN}.bmp?grayscale=2`,
 			`${DEFAULT_SCREEN}_${uniqueId}.bmp`,
 			DEFAULT_REFRESH_RATE,
 		);
@@ -80,13 +64,10 @@ export async function GET(request: Request) {
 		metadata: { headers },
 	});
 
-	console.log('zzz: device ready with api key: ', headers.apiKey);
-
 	try {
-		console.log('Calling find or create')
 		const device = await findOrCreateDevice(headers);
 
-		console.log('Called find or create: ');
+		console.log('found device: ', device);
 		if (!device) {
 			logError("Error fetching/creating device", {
 				source: "api/display",
@@ -95,28 +76,21 @@ export async function GET(request: Request) {
 			return buildErrorResponse("Device not found", baseUrl, uniqueId);
 		}
 
-		console.log('Device details: ', device);
-		const deviceUserId = device.user_id;
 		let screenToDisplay = device.screen;
-		const orientation = device.screen_orientation || "landscape";
 
-		// Use dimensions from headers if provided, otherwise fall back to device settings
-		const storedWidth =
+		console.log('found screen: ', screenToDisplay);
+		const orientation = device.screen_orientation || "landscape";
+		const deviceWidth =
 			orientation === "landscape"
 				? device.screen_width || DEFAULT_IMAGE_WIDTH
 				: device.screen_height || DEFAULT_IMAGE_HEIGHT;
-		const storedHeight =
+		const deviceHeight =
 			orientation === "landscape"
 				? device.screen_height || DEFAULT_IMAGE_HEIGHT
 				: device.screen_width || DEFAULT_IMAGE_WIDTH;
-
-		const deviceWidth = headers.width || storedWidth;
-		const deviceHeight = headers.height || storedHeight;
-		const grayscaleLevels = getGrayscaleLevels(device.grayscale);
-
-		// Build common query params for image URLs
-		const baseQueryParams = `width=${deviceWidth}&height=${deviceHeight}&grayscale=${grayscaleLevels}${headers.base64 ? "&base64=true" : ""}`;
-
+		const grayscaleLevels = getGrayscaleLevels(
+			(device as { grayscale?: number | null }).grayscale ?? null,
+		);
 		let dynamicRefreshRate = 180;
 		let imageUrl: string;
 
@@ -127,7 +101,6 @@ export async function GET(request: Request) {
 						device.playlist_id,
 						device.current_playlist_index || 0,
 						device.timezone || "UTC",
-						deviceUserId,
 					);
 
 					if (activeItem) {
@@ -148,12 +121,12 @@ export async function GET(request: Request) {
 						dynamicRefreshRate = 60;
 					}
 				}
-				imageUrl = `${baseUrl}/${screenToDisplay || "not-found"}.bmp?${baseQueryParams}`;
+				imageUrl = `${baseUrl}/${screenToDisplay || "not-found"}.bmp?width=${deviceWidth}&height=${deviceHeight}&grayscale=${grayscaleLevels}`;
 				break;
 
 			case DeviceDisplayMode.MIXUP:
 				if (device.mixup_id) {
-					imageUrl = `${baseUrl}/mixup/${device.mixup_id}.bmp?${baseQueryParams}&access_token=${encodeURIComponent(headers.apiKey)}`;
+					imageUrl = `${baseUrl}/mixup/${device.mixup_id}.bmp?width=${deviceWidth}&height=${deviceHeight}&grayscale=${grayscaleLevels}`;
 					const metadata = {
 						deviceId: device.friendly_id,
 						mixupId: device.mixup_id,
@@ -163,7 +136,7 @@ export async function GET(request: Request) {
 						metadata,
 					});
 				} else {
-					imageUrl = `${baseUrl}/${screenToDisplay || "not-found"}.bmp?${baseQueryParams}`;
+					imageUrl = `${baseUrl}/${screenToDisplay || "not-found"}.bmp?width=${deviceWidth}&height=${deviceHeight}&grayscale=${grayscaleLevels}`;
 				}
 				dynamicRefreshRate = calculateRefreshRate(
 					device.refresh_schedule as unknown as RefreshSchedule,
@@ -173,12 +146,13 @@ export async function GET(request: Request) {
 				break;
 
 			default:
+				console.log('reached default')
 				dynamicRefreshRate = calculateRefreshRate(
 					device.refresh_schedule as unknown as RefreshSchedule,
 					180,
 					device.timezone || "UTC",
 				);
-				imageUrl = `${baseUrl}/${screenToDisplay || "not-found"}.bmp?${baseQueryParams}`;
+				imageUrl = `${baseUrl}/${screenToDisplay || "not-found"}.bmp?width=${deviceWidth}&height=${deviceHeight}&grayscale=${grayscaleLevels}`;
 				break;
 		}
 
@@ -194,36 +168,10 @@ export async function GET(request: Request) {
 		};
 		logInfo("Display request successful", { source: "api/display", metadata });
 
-		// Check for firmware updates
-		const latestFirmware = await getLatestFirmware();
-		const firmwareExtra: Record<string, unknown> = {
-			// Tell the firmware how to rotate the panel. The TRMNL panel is
-			// portrait-native, so a landscape orientation needs a 90° rotation.
-			// 0 = portrait (no rotation), 1 = landscape (90°).
-			image_rotate: orientation === "landscape" ? 1 : 0,
-		};
-
-		if (
-			latestFirmware &&
-			isUpdateAvailable(device.firmware_version, latestFirmware.version)
-		) {
-			firmwareExtra.update_firmware = true;
-			firmwareExtra.firmware_url = latestFirmware.downloadUrl;
-			logInfo("Firmware update available", {
-				source: "api/display",
-				metadata: {
-					deviceId: device.friendly_id,
-					currentVersion: device.firmware_version,
-					latestVersion: latestFirmware.version,
-				},
-			});
-		}
-
 		return buildDisplayResponse(
 			imageUrl,
 			`${screenToDisplay || "not-found"}_${uniqueId}.bmp`,
 			dynamicRefreshRate,
-			firmwareExtra,
 		);
 	} catch (_error) {
 		logError("Internal server error", {
