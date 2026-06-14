@@ -80,9 +80,13 @@ export async function GET(request: Request) {
 		metadata: { headers },
 	});
 
+	console.log('zzz: device ready with api key: ', headers.apiKey);
+
 	try {
+		console.log('Calling find or create')
 		const device = await findOrCreateDevice(headers);
 
+		console.log('Called find or create: ');
 		if (!device) {
 			logError("Error fetching/creating device", {
 				source: "api/display",
@@ -91,6 +95,7 @@ export async function GET(request: Request) {
 			return buildErrorResponse("Device not found", baseUrl, uniqueId);
 		}
 
+		console.log('Device details: ', device);
 		const deviceUserId = device.user_id;
 		let screenToDisplay = device.screen;
 		const orientation = device.screen_orientation || "landscape";
